@@ -1,6 +1,31 @@
-#!/usr/bin/xcrun swift
+#!/usr/bin/xcrun swift -Onone
 
 import Darwin
+
+private struct function_trampoline {
+    private var trampoline_ptr: COpaquePointer
+    var function_obj_ptr: UnsafeMutablePointer<function_obj>
+
+    init(prototype: function_trampoline, new_fp: COpaquePointer) {
+        trampoline_ptr = prototype.trampoline_ptr
+
+        function_obj_ptr = UnsafeMutablePointer<function_obj>.alloc(1)
+        let fobj = function_obj(prototype: prototype.function_obj_ptr.memory, new_fp: new_fp)
+        function_obj_ptr.initialize(fobj)
+    }
+}
+
+private struct function_obj {
+    private var some_ptr_0: COpaquePointer
+    private var some_ptr_1: COpaquePointer
+    var function_ptr: COpaquePointer
+
+    init(prototype: function_obj, new_fp: COpaquePointer) {
+        some_ptr_0 = prototype.some_ptr_0
+        some_ptr_1 = prototype.some_ptr_1
+        function_ptr = new_fp
+    }
+}
 
 extension COpaquePointer: Printable {
     public var description: String {
@@ -31,5 +56,15 @@ extension COpaquePointer: Printable {
 }
 
 // # Usage
-let pointer = COpaquePointer("/usr/lib/libc.dylib", "random")
+typealias FunctionFromDoubleToDouble = (Double) -> Double
+
+@asmname("floor") func my_floor(dbl: Double) -> Double
+println(my_floor(6.7))
+
+let pointer = COpaquePointer("/usr/lib/libc.dylib", "ceil")
 println(pointer.description)
+
+private let orig_trampoline = unsafeBitCast(my_floor, function_trampoline.self)
+private let new_trampoline = function_trampoline(prototype: orig_trampoline, new_fp: pointer)
+let my_ceil = unsafeBitCast(new_trampoline, FunctionFromDoubleToDouble.self)
+println(my_ceil(6.7))
